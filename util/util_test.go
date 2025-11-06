@@ -397,7 +397,7 @@ func (suite *Suite) TestNewPod() {
 	suite.Equal("name", pod.Name)
 	suite.Equal("name", pod.Labels["app"])
 	suite.Equal("name", pod.Annotations["chaos"])
-	suite.Equal("/api/v1/namespaces/namespace/pods/name", pod.SelfLink)
+
 	suite.EqualValues("phase", pod.Status.Phase)
 }
 

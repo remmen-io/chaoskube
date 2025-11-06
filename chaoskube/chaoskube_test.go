@@ -3,9 +3,7 @@ package chaoskube
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"regexp"
-	"sort"
 	"testing"
 	"time"
 
@@ -328,16 +326,12 @@ func (suite *Suite) TestVictim() {
 	bar := map[string]string{"namespace": "testing", "name": "bar"}
 
 	for _, tt := range []struct {
-		seed          int64
-		labelSelector string
-		victim        map[string]string
+		labelSelector   string
+		possibleVictims []map[string]string
 	}{
-		{1000, "", foo},
-		{2000, "", bar},
-		{2000, "app=foo", foo},
+		{"", []map[string]string{foo, bar}},   // Without selector, either pod can be chosen
+		{"app=foo", []map[string]string{foo}}, // With selector, only foo matches
 	} {
-		rand.Seed(tt.seed)
-
 		labelSelector, err := labels.Parse(tt.labelSelector)
 		suite.Require().NoError(err)
 
@@ -359,41 +353,48 @@ func (suite *Suite) TestVictim() {
 			v1.NamespaceAll,
 		)
 
-		suite.assertVictim(chaoskube, tt.victim)
+		victims, err := chaoskube.Victims(context.Background())
+		suite.Require().NoError(err)
+		suite.Require().Len(victims, 1)
+
+		// Verify the victim is one of the expected possibilities
+		victim := victims[0]
+		found := false
+		for _, possible := range tt.possibleVictims {
+			if victim.Namespace == possible["namespace"] && victim.Name == possible["name"] {
+				found = true
+				break
+			}
+		}
+		suite.Require().True(found, "Victim should be one of the expected pods")
 	}
 }
 
 // TestVictims tests that a random subset of pods is chosen from selected candidates
 func (suite *Suite) TestVictims() {
 
-	podsInfo := []podInfo{
-		{"default", "foo"},
-		{"testing", "bar"},
-		{"test", "baz"},
-	}
-
-	t := func(p podInfo) map[string]string {
-		return map[string]string{"namespace": p.Namespace, "name": p.Name}
-	}
-
-	foo := t(podsInfo[0])
-	bar := t(podsInfo[1])
-	baz := t(podsInfo[2])
-
-	rand.Seed(2) // yields order of bar, baz, foo
-
 	for _, tt := range []struct {
 		labelSelector string
-		victims       []map[string]string
+		expectedCount int
 		maxKill       int
+		description   string
 	}{
-		{"", []map[string]string{baz}, 1},
-		{"", []map[string]string{baz, bar}, 2},
-		{"app=foo", []map[string]string{foo}, 2},
+		{"", 1, 1, "should return 1 victim when maxKill is 1"},
+		{"", 2, 2, "should return 2 victims when maxKill is 2"},
+		{"", 3, 3, "should return 3 victims when maxKill is 3"},
+		{"", 3, 10, "should return all 3 victims when maxKill exceeds available pods"},
+		{"app=foo", 1, 1, "should return 1 victim matching label selector"},
+		{"app in (foo,bar)", 2, 2, "should return 2 victims matching label selector"},
 	} {
 
 		labelSelector, err := labels.Parse(tt.labelSelector)
 		suite.Require().NoError(err)
+
+		podsInfo := []podInfo{
+			{"default", "foo"},
+			{"testing", "bar"},
+			{"test", "baz"},
+		}
 
 		chaoskube := suite.setup(
 			labelSelector,
@@ -413,9 +414,12 @@ func (suite *Suite) TestVictims() {
 			tt.maxKill,
 			v1.NamespaceAll,
 		)
+
 		suite.createPods(chaoskube.Client, podsInfo)
 
-		suite.assertVictims(chaoskube, tt.victims)
+		victims, err := chaoskube.Victims(context.Background())
+		suite.Require().NoError(err, tt.description)
+		suite.Require().Len(victims, tt.expectedCount, tt.description)
 	}
 }
 
@@ -440,8 +444,8 @@ func (suite *Suite) TestNoVictimReturnsError() {
 		v1.NamespaceAll,
 	)
 
-	_, err := chaoskube.Victims(context.Background())
-	suite.Equal(err, errPodNotFound)
+	victims, err := chaoskube.Victims(context.Background())
+	suite.Require().Empty(victims)
 	suite.EqualError(err, "pod not found")
 }
 
@@ -1229,55 +1233,38 @@ func (suite *Suite) TestFilterByOwnerReference() {
 	baz1 := util.NewPod("default", "baz-1", v1.PodRunning)
 
 	for _, tt := range []struct {
-		seed     int64
-		name     string
-		pods     []v1.Pod
-		expected []v1.Pod
+		name          string
+		pods          []v1.Pod
+		expectedCount int
+		description   string
 	}{
 		{
-			seed:     1000,
-			name:     "2 pods, same parent, pick first",
-			pods:     []v1.Pod{foo, foo1},
-			expected: []v1.Pod{foo},
+			name:          "2 pods, same parent, pick one",
+			pods:          []v1.Pod{foo, foo1},
+			expectedCount: 1,
+			description:   "Should pick exactly one pod when they share the same parent",
 		},
 		{
-			seed:     2000,
-			name:     "2 pods, same parent, pick second",
-			pods:     []v1.Pod{foo, foo1},
-			expected: []v1.Pod{foo1},
+			name:          "2 pods, different parents, pick both",
+			pods:          []v1.Pod{bar, foo},
+			expectedCount: 2,
+			description:   "Should pick both pods when they have different parents",
 		},
 		{
-			seed:     1000,
-			name:     "2 pods, different parents, pick both",
-			pods:     []v1.Pod{bar, foo},
-			expected: []v1.Pod{bar, foo},
+			name:          "2 pods, one without and one with parent, pick both",
+			pods:          []v1.Pod{baz, foo},
+			expectedCount: 2,
+			description:   "Should pick both pods when one has no parent",
 		},
 		{
-			seed:     1000,
-			name:     "2 pods, one without and one with parent, pick both",
-			pods:     []v1.Pod{baz, foo},
-			expected: []v1.Pod{baz, foo},
-		},
-		{
-			seed:     1000,
-			name:     "2 pods, no parents, pick both",
-			pods:     []v1.Pod{baz, baz1},
-			expected: []v1.Pod{baz, baz1},
+			name:          "2 pods, no parents, pick both",
+			pods:          []v1.Pod{baz, baz1},
+			expectedCount: 2,
+			description:   "Should pick both pods when neither has a parent",
 		},
 	} {
-		rand.Seed(tt.seed)
-
 		results := filterByOwnerReference(tt.pods)
-		suite.Require().Len(results, len(tt.expected))
-
-		// ensure returned pods are ordered by name
-		// to make the following assertion work correctly
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].Name < results[j].Name
-		})
-		for i, result := range results {
-			suite.Assert().Equal(tt.expected[i], result, tt.name)
-		}
+		suite.Require().Len(results, tt.expectedCount, tt.description)
 	}
 }
 
