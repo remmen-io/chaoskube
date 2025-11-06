@@ -1,0 +1,130 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":enablePreCommit",
+    "group:allNonMajor",
+    "schedule:weekly"
+  ],
+  "timezone": "UTC",
+  "schedule": [
+    "before 8am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "assignees": [
+    "linki"
+  ],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 2,
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "packageRules": [
+    {
+      "description": "Group all Go dependencies together for minor and patch updates",
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Go dependencies (non-major)",
+      "schedule": ["before 8am on monday"]
+    },
+    {
+      "description": "Separate PR for major Go dependency updates",
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["major"],
+      "groupName": null,
+      "schedule": ["before 8am on monday"],
+      "labels": ["dependencies", "major-update"]
+    },
+    {
+      "description": "Group Kubernetes dependencies together",
+      "matchPackagePrefixes": ["k8s.io/"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Kubernetes dependencies",
+      "schedule": ["before 8am on monday"],
+      "labels": ["dependencies", "kubernetes"]
+    },
+    {
+      "description": "Separate PR for major Kubernetes updates",
+      "matchPackagePrefixes": ["k8s.io/"],
+      "matchUpdateTypes": ["major"],
+      "groupName": null,
+      "schedule": ["before 8am on monday"],
+      "labels": ["dependencies", "kubernetes", "major-update"],
+      "prPriority": 10
+    },
+    {
+      "description": "Group Prometheus dependencies",
+      "matchPackagePrefixes": ["github.com/prometheus/"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Prometheus dependencies",
+      "schedule": ["before 8am on monday"]
+    },
+    {
+      "description": "Group golang.org/x dependencies",
+      "matchPackagePrefixes": ["golang.org/x/"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Go standard library extensions",
+      "schedule": ["before 8am on monday"]
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "pinDigests": true,
+      "schedule": ["before 8am on monday"],
+      "labels": ["dependencies", "github-actions"]
+    },
+    {
+      "description": "Docker base image updates",
+      "matchDatasources": ["docker"],
+      "groupName": "Docker images",
+      "schedule": ["before 8am on monday"],
+      "labels": ["dependencies", "docker"]
+    },
+    {
+      "description": "Automerge non-major Go dependency updates with passing tests",
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "platformAutomerge": true,
+      "requiredStatusChecks": null
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "assignees": ["linki"],
+    "schedule": ["at any time"]
+  },
+  "ignoreDeps": [],
+  "ignorePresets": [],
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "to {{newVersion}}",
+  "prBodyColumns": [
+    "Package",
+    "Change",
+    "Age",
+    "Adoption",
+    "Passing",
+    "Confidence"
+  ],
+  "prBodyDefinitions": {
+    "Age": "[![age](https://developer.mend.io/api/mc/badges/age/{{datasource}}/{{depName}}/{{newVersion}}?slim=true)](https://docs.renovatebot.com/merge-confidence/)",
+    "Adoption": "[![adoption](https://developer.mend.io/api/mc/badges/adoption/{{datasource}}/{{depName}}/{{newVersion}}?slim=true)](https://docs.renovatebot.com/merge-confidence/)",
+    "Passing": "[![passing](https://developer.mend.io/api/mc/badges/compatibility/{{datasource}}/{{depName}}/{{currentVersion}}/{{newVersion}}?slim=true)](https://docs.renovatebot.com/merge-confidence/)",
+    "Confidence": "[![confidence](https://developer.mend.io/api/mc/badges/confidence/{{datasource}}/{{depName}}/{{currentVersion}}/{{newVersion}}?slim=true)](https://docs.renovatebot.com/merge-confidence/)"
+  },
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🤖 Renovate Dashboard",
+  "dependencyDashboardHeader": "This dashboard provides an overview of all updates detected by Renovate.",
+  "dependencyDashboardApproval": false,
+  "configMigration": true
+}
