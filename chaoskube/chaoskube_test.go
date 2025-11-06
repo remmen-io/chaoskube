@@ -789,18 +789,6 @@ func (suite *Suite) assertCandidates(chaoskube *Chaoskube, expected []map[string
 	suite.AssertPods(pods, expected)
 }
 
-func (suite *Suite) assertVictims(chaoskube *Chaoskube, expected []map[string]string) {
-	victims, err := chaoskube.Victims(context.Background())
-	suite.Require().NoError(err)
-
-	for i, victim := range victims {
-		suite.AssertPod(victim, expected[i])
-	}
-}
-
-func (suite *Suite) assertVictim(chaoskube *Chaoskube, expected map[string]string) {
-	suite.assertVictims(chaoskube, []map[string]string{expected})
-}
 
 func (suite *Suite) assertNotified(notifier *notifier.Noop) {
 	suite.Assert().Greater(notifier.Calls, 0)
